@@ -4,13 +4,18 @@ from rasterio.mask import mask
 from rasterio.transform import from_origin
 import numpy as np
 import matplotlib.pyplot as plt
+from variables import pol_region_map
 
 class dnb_annual:
-    def __init__(self, year, dnb_types, country_polygons):
+    def __init__(self, year, dnb_types, country_polygons, country_name):
         self.year = year
         self.dnb_types = dnb_types
         self.country_polygons = country_polygons
-        self.grids = ["h20v03", "h20v04", "h21v03", "h21v04", "h22v04"]
+        self.country = country_name
+        if country_name == "ukr":
+            self.grids = ["h20v03", "h20v04", "h21v03", "h21v04", "h22v04"]
+        elif country_name == "pol":
+            self.grids = ["h19v03", "h19v04", "h20v03", "h20v04"]
         self.region_names = list(country_polygons['shapeName'])
         self.dnb_data = {dnb_type: {} for dnb_type in dnb_types}
         self.dnb_flags = {dnb_type: {} for dnb_type in dnb_types}
@@ -48,27 +53,38 @@ class dnb_annual:
     def save_rasters(self):
         # Resolution and transform
         fill_matrix = np.zeros((2400, 2400))
-        xmin, ymax = 20.0, 60.0
+        if self.country == "ukr":
+            xmin, ymax = 20.0, 60.0
+        elif self.country == "pol":
+            xmin, ymax = 10.0, 60.0
         resolution = 15 / 3600
         transform = from_origin(xmin, ymax, resolution, resolution)
 
         for dnb_type in self.dnb_types:
             # stack the grids
-            raster_dnb = np.vstack((np.hstack((self.dnb_data[dnb_type]["h20v03"], self.dnb_data[dnb_type]["h21v03"], fill_matrix)), 
-                                np.hstack((self.dnb_data[dnb_type]["h20v04"], self.dnb_data[dnb_type]["h21v04"], self.dnb_data[dnb_type]["h22v04"]))))
-            
+            if self.country == "ukr":
+                raster_dnb = np.vstack((np.hstack((self.dnb_data[dnb_type]["h20v03"], self.dnb_data[dnb_type]["h21v03"], fill_matrix)), 
+                                    np.hstack((self.dnb_data[dnb_type]["h20v04"], self.dnb_data[dnb_type]["h21v04"], self.dnb_data[dnb_type]["h22v04"]))))
+            elif self.country == "pol":
+                raster_dnb = np.vstack((np.hstack((self.dnb_data[dnb_type]["h19v03"], self.dnb_data[dnb_type]["h20v03"])), 
+                                    np.hstack((self.dnb_data[dnb_type]["h19v04"], self.dnb_data[dnb_type]["h20v04"]))))
+
             # save the raster
-            file_path = f"data/annual_rasters/{self.year}_{dnb_type}_dnb.tif"
+            file_path = f"data/annual_rasters/{self.year}_{self.country}_{dnb_type}_dnb.tif"
             with rasterio.open(file_path, 'w', driver='GTiff', height=raster_dnb.shape[0], width=raster_dnb.shape[1], 
                                count=1, dtype=raster_dnb.dtype, crs='+proj=latlong', transform=transform) as dst:
                 dst.write(raster_dnb, 1) 
 
             # stack the high quality grids
-            raster_dnb_hq = np.vstack((np.hstack((self.dnb_high_quality_data[dnb_type]["h20v03"], self.dnb_high_quality_data[dnb_type]["h21v03"], fill_matrix)), 
-                                    np.hstack((self.dnb_high_quality_data[dnb_type]["h20v04"], self.dnb_high_quality_data[dnb_type]["h21v04"], self.dnb_high_quality_data[dnb_type]["h22v04"]))))
+            if self.country == "ukr":
+                raster_dnb_hq = np.vstack((np.hstack((self.dnb_high_quality_data[dnb_type]["h20v03"], self.dnb_high_quality_data[dnb_type]["h21v03"], fill_matrix)), 
+                                        np.hstack((self.dnb_high_quality_data[dnb_type]["h20v04"], self.dnb_high_quality_data[dnb_type]["h21v04"], self.dnb_high_quality_data[dnb_type]["h22v04"]))))
+            elif self.country == "pol":
+                raster_dnb_hq = np.vstack((np.hstack((self.dnb_high_quality_data[dnb_type]["h19v03"], self.dnb_high_quality_data[dnb_type]["h20v03"])), 
+                                        np.hstack((self.dnb_high_quality_data[dnb_type]["h19v04"], self.dnb_high_quality_data[dnb_type]["h20v04"]))))
 
             # save the high-quality raster
-            file_path = f"data/annual_rasters/{self.year}_{dnb_type}_dnb_hq.tif"
+            file_path = f"data/annual_rasters/{self.year}_{self.country}_{dnb_type}_dnb_hq.tif"
             with rasterio.open(file_path, 'w', driver='GTiff', height=raster_dnb_hq.shape[0], width=raster_dnb_hq.shape[1],
                                 count=1, dtype=raster_dnb_hq.dtype, crs='+proj=latlong', transform=transform) as dst:
                  dst.write(raster_dnb_hq, 1)
@@ -76,11 +92,11 @@ class dnb_annual:
     def load_rasters(self):
         for dnb_type in self.dnb_types:
             # load unfiltered data
-            file_path = f"data/annual_rasters/{self.year}_{dnb_type}_dnb.tif"
+            file_path = f"data/annual_rasters/{self.year}_{self.country}_{dnb_type}_dnb.tif"
             self.rasters[dnb_type] = rasterio.open(file_path)   
 
             # load high quality data
-            file_path = f"data/annual_rasters/{self.year}_{dnb_type}_dnb_hq.tif"
+            file_path = f"data/annual_rasters/{self.year}_{self.country}_{dnb_type}_dnb_hq.tif"
             self.rasters_hq[dnb_type] = rasterio.open(file_path)
 
 
@@ -164,3 +180,10 @@ class dnb_annual:
             with h5py.File(f"data/annual_region_images/{self.year}_{region_un}_hq.h5", 'r') as hf:
                 for dnb_type in self.dnb_types:
                     self.regional_images_pad_hq[dnb_type][region] = hf[dnb_type][:]
+
+def clean_pol_polygons(pol_polygons):
+
+    pol_polygons['name'] = pol_polygons['name'].apply(lambda x: pol_region_map[x])
+    pol_polygons.rename(columns={'name': 'shapeName'}, inplace=True)
+
+    return pol_polygons

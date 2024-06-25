@@ -107,6 +107,14 @@ calculate_gdp <- function(data, country) {
   # multiply by nominal gdp in 2012
   data[years] <- data[years] * data$nominal_2012
   
+  # add years 2022 and 2023 for ukraine, 2023 for poland
+  if (country == "ukr") {
+    data$y2022 <- NA
+    data$y2023 <- NA
+  } else if (country == "pol") {
+    data$y2023 <- NA
+  }
+  
   # convert to long format
   data <- data %>% select(-nominal_2012)
   
@@ -116,7 +124,6 @@ calculate_gdp <- function(data, country) {
   # delete y from the year column
   data$year <- str_remove(data$year, "y")
   
-  # 
   
   return(data)
 }
