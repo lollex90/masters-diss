@@ -1,55 +1,54 @@
 library(tidyverse)
 
-# read data
+setwd("~/LSE/Dissertation/masters-diss")
+
+sum_columns <- c("nearnad_snow_cov_sum", "nearnad_snow_free_sum", "offnad_snow_cov_sum",
+                        "offnad_snow_free_sum", "allangle_snow_cov_sum", "allangle_snow_free_sum", 
+                        "nearnad_snow_free_hq_sum", "offnad_snow_free_hq_sum", "allangle_snow_free_hq_sum")
+
+# read in the data
 ukraine_data <- read.csv("data/tabular_data_ukraine.csv")
 
-# keep only off and on nadir snow free obsaervations
-ukraine_data <- ukraine_data %>%
-  # select(-contains("cov"), -contains("allangle")) %>% 
-  select(-year) %>% 
-  na.omit()
+# train-test split, predict for 2022 and 2023
+train_data <- ukraine_data %>% 
+  filter(year < 2021)
 
-# run a fixed effects model
-fixed_effects <- lm(gdp ~ ., data = ukraine_data)
+test_data <- ukraine_data %>%
+  filter(year == 2021)
 
-summary(fixed_effects)
+full_data <- ukraine_data %>%
+  filter(year < 2022)
 
-# predict for the year 2022 using the fixed effects model
-test_data <- read.csv("data/tabular_data_ukraine.csv") %>% 
-  filter(year == 2022) %>% 
-  #select(-contains("cov"), -contains("allangle")) %>% 
-  select(-year, -gdp)
+prediction_data <- ukraine_data %>%
+  filter(year > 2021)
 
-test_data$real_gdp <- predict(fixed_effects, test_data)
+for (indep_var in sum_columns) {
+  
+  formula <- as.formula(paste("log(real_gdp) ~ log(", indep_var, ") + region", sep = ""))
+  model <- lm(formula, data = train_data)
+  
+  # use the model to predict for the test data
+  test_data$real_gdp_pred <- exp(predict(model, test_data))
+  
+  # calculate the absolute % error
+  test_data$error <- abs(((test_data$real_gdp - test_data$real_gdp_pred) / test_data$real_gdp) * 100)
+  
+  # print the mean % error
+  print(paste("Mean % error for", indep_var, "is", mean(test_data$error, na.rm = TRUE)))
+  
+  # estimate the same model on the entire dataset
+  model <- lm(formula, data = full_data)
+  
+  # predict on the prediction data
+  prediction_data$real_gdp_pred <- exp(predict(model, prediction_data))
+  
+  # calculate the gdp change from 2021 to 2022
+  prediction_data <- prediction_data %>% filter(year == 2022) 
+  gdp_change <- ((sum(prediction_data$real_gdp_pred) - sum(test_data$real_gdp))/sum(test_data$real_gdp)) * 100
+  
+  print(paste("GDP change for", indep_var, "is", gdp_change))
 
-results <- test_data %>% 
-  select(region, real_gdp) %>% 
-  mutate(year = 2022) 
+}
 
-# get gdp data
-gdp_data <- read.csv("data/clean_ukr_gdp.csv") %>% 
-  na.omit()
 
-# append results to the gdp data
-gdp_data <- rbind(gdp_data, results)
 
-# plot the results
-ggplot(gdp_data, aes(x = year, y = real_gdp, color = region)) +
-  geom_line() +
-  labs(title = "Ukraine GDP by Region",
-       x = "Year",
-       y = "GDP") +
-  theme_minimal() +
-  theme(legend.position = "bottom") +
-  scale_color_brewer(palette = "Set1")
-
-# calculate average % change between 2021 and 2022
-summary <- gdp_data %>%
-  filter(year %in% c(2021, 2022)) %>% 
-  pivot_wider(names_from = year, values_from = real_gdp) %>% 
-  mutate(change = ((`2022` - `2021`) / `2021`) * 100)
-
-# turn to wide format with years as columns
-summary <- summary %>% 
-  pivot_wider(names_from = year, values_from = real_gdp) %>% 
-  mutate(change = ((`2022` - `2021`) / `2021`) * 100)
