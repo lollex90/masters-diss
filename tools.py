@@ -2,7 +2,11 @@ import pandas as pd
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
-
+from keras.models import Sequential, Model
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Resizing
+import tensorflow as tf
+import random
+import os
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.linear_model import Lasso
 import xgboost as xgb
@@ -149,3 +153,63 @@ def predict_with_model(pre_war_data, prediction_data, selected_columns, model_ty
     pred_gdp_change = 100*(np.sum(y_pred) - np.sum(data_2021["real_gdp"])) / np.sum(data_2021["real_gdp"])
 
     return pred_gdp_change, best_params
+
+def define_cnn(n_features = 10, n_conv = 2, n_dense = 2):
+    model = Sequential()
+    model.add(Resizing(300, 440, input_shape=(765, 1076, 1)))
+    for i in range(n_conv):
+        model.add(Conv2D(8 ** i, (3, 3), activation='relu'))
+        model.add(MaxPooling2D((2, 2)))
+    model.add(Flatten())
+    for i in range(n_dense-1, 0, -1):
+        model.add(Dense(8 ** i, activation='relu'))
+    model.add(Dense(n_features))
+    return model
+
+def set_seed(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    tf.random.set_seed(seed)
+    # Ensuring TensorFlow runs deterministically (may impact performance)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+def extract_features(model, country, country_2021, country_2022, X_train, X_pred, X_test, n_features):
+
+    # get the column names
+    column_names = ["region", "year", "real_gdp"] + [f"feature_{i+1}" for i in range(n_features)]
+
+    # get features for 2012-2020
+    y_train = model.predict(X_train)
+    country_stage_2 = pd.DataFrame(columns = column_names)
+    country_train = country[country["year"] != 2021]
+    country_train.reset_index(drop=True, inplace=True)
+    for i in range(len(country_train)):
+        country_stage_2.loc[i, "region"] = country_train["region"][i]
+        country_stage_2.loc[i, "year"] = country_train["year"][i]
+        country_stage_2.loc[i, "real_gdp"] = country_train["real_gdp"][i]
+        for j in range(n_features):
+            country_stage_2.loc[i, f"feature_{j+1}"] = y_train[i][j]
+
+    # get the features for 2021
+    y_test = model.predict(X_test)
+    for i in range(len(country_2021)):
+        for j in range(n_features):
+            country_2021.loc[i, f"feature_{j+1}"] = y_test[i][j]
+    country_2021 = country_2021[column_names]
+
+    # get the features for 2022
+    y_pred = model.predict(X_pred)
+    for i in range(len(country_2022)):
+        for j in range(n_features):
+            country_2022.loc[i, f"feature_{j+1}"] = y_pred[i][j]
+
+    country_2022 = country_2022[column_names]
+
+    # change all features to float
+    for i in range(n_features):
+        country_stage_2[f"feature_{i+1}"] = country_stage_2[f"feature_{i+1}"].astype(float)
+        country_2021[f"feature_{i+1}"] = country_2021[f"feature_{i+1}"].astype(float)
+        country_2022[f"feature_{i+1}"] = country_2022[f"feature_{i+1}"].astype(float)
+
+    return country_stage_2, country_2021, country_2022
