@@ -28,23 +28,23 @@ def build_model_and_predict(pre_war_data, prediction_data, selected_columns, mod
 
             train_data = pre_war_data[pre_war_data['year'] != year]
             test_data = pre_war_data[pre_war_data['year'] == year]     
-            mae, mpe, best_params = build_model(train_data, test_data, selected_columns, model_type, param_grid, log_transform, scale)
+            mae, mpe, best_params, y_pred = build_model(train_data, test_data, selected_columns, model_type, param_grid, log_transform, scale)
 
             total_mae += mae/10
             total_mpe += mpe/10
 
-        gdp_change, best_params = predict_with_model(pre_war_data, prediction_data, selected_columns, model_type, param_grid, log_transform, scale)
+        gdp_change, y_pred= predict_with_model(pre_war_data, prediction_data, selected_columns, model_type, param_grid, log_transform, scale)
         
-        return total_mae, total_mpe, gdp_change, best_params
+        return total_mae, total_mpe, gdp_change, y_pred
 
     else:
 
         train_data = pre_war_data[pre_war_data['year'] != 2021]
         test_data = pre_war_data[pre_war_data['year'] == 2021]
-        mae, mpe, _ = build_model(train_data, test_data, selected_columns, model_type, param_grid, log_transform, scale)
-        gdp_change, best_params = predict_with_model(pre_war_data, prediction_data, selected_columns, model_type, param_grid, log_transform, scale)
+        mae, mpe, best_params, y_pred = build_model(train_data, test_data, selected_columns, model_type, param_grid, log_transform, scale)
+        gdp_change, y_pred = predict_with_model(pre_war_data, prediction_data, selected_columns, model_type, param_grid, log_transform, scale)
 
-        return mae, mpe, gdp_change, best_params
+        return mae, mpe, gdp_change, y_pred
 
 def build_train_test_sets(selected_columns, train_data, test_data, log_transform = False, scale = False):
 
@@ -139,7 +139,7 @@ def predict_with_model(pre_war_data, prediction_data, selected_columns, model_ty
         model_pred = Lasso()
 
     # hyperparameter tuning
-    grid_search = GridSearchCV(estimator=model_pred, param_grid=param_grid, cv=5, n_jobs=-1)
+    grid_search = GridSearchCV(estimator=model_pred, param_grid=param_grid, cv=10, n_jobs=-1)
     grid_search.fit(X_pre_war, y_pre_war)
     best_model = grid_search.best_estimator_
     best_params = best_model.get_params()
@@ -152,7 +152,7 @@ def predict_with_model(pre_war_data, prediction_data, selected_columns, model_ty
     #     y_pred = np.exp(y_pred)
     pred_gdp_change = 100*(np.sum(y_pred) - np.sum(data_2021["real_gdp"])) / np.sum(data_2021["real_gdp"])
 
-    return pred_gdp_change, best_params
+    return pred_gdp_change, y_pred
 
 def define_cnn(n_features = 10, n_conv = 2, n_dense = 2):
     model = Sequential()

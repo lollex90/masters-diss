@@ -131,6 +131,19 @@ calculate_gdp <- function(data, country) {
 gdp_poland_clean <- calculate_gdp(gdp_poland, "pol") 
 gdp_ukraine_clean <- calculate_gdp(gdp_ukraine, "ukr") 
 
+# add "Kyiv_Oblast_City" to gdp_ukraine_clean for 2012-2023
+kiev <- data.frame(region = "Kyiv_Oblast_City", year = c(2012:2023), real_gdp = NA)
+kiev_oblast_city <- gdp_ukraine_clean[gdp_ukraine_clean$region == "Kyiv" | gdp_ukraine_clean$region == "Kyiv_Oblast",]
+
+for (i in 1:nrow(kiev)) {
+  
+  year <- kiev$year[i]
+  kiev$real_gdp[i] <- sum(kiev_oblast_city$real_gdp[kiev_oblast_city$year == year])
+}
+  
+# add kiev to gdp_ukraine_clean
+gdp_ukraine_clean <- rbind(gdp_ukraine_clean, kiev)
+
 # save data
 write_csv(gdp_poland_clean, "data/gdp_poland_clean.csv")
 write_csv(gdp_ukraine_clean, "data/gdp_ukraine_clean.csv")
