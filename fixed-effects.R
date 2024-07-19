@@ -9,69 +9,39 @@ sum_columns <- c("nearnad_snow_cov_sum", "nearnad_snow_free_sum", "offnad_snow_c
 sum_columns <- c("allangle_snow_free_hq_sum")
 
 # read in the data
-ukraine_data <- read.csv("data/tabular_data_ukraine.csv")
+ukraine_data <- read.csv("data/tabular_data_ukraine.csv") %>% 
+  filter(region != "Kyiv_Oblast_City", 
+         year < 2022) %>% 
+  select(region, year, real_gdp, allangle_snow_free_hq_sum) %>% 
+  mutate(gdp_diff = real_gdp - lag(real_gdp, 1), 
+         light_diff = allangle_snow_free_hq_sum - lag(allangle_snow_free_hq_sum, 1))
 
-# train-test split, predict for 2022 and 2023
-train_data <- ukraine_data %>% 
-  filter(year < 2021)
+# initialise a df to store error results
+error_df <- data.frame()
 
-test_data <- ukraine_data %>%
-  filter(year == 2021)
-
-test_data$year <- 2020  # Temporarily use the last year of the training data
-
-full_data <- ukraine_data %>%
-  filter(year < 2022)
-
-prediction_data <- ukraine_data %>%
-  filter(year == 2022)
-
-prediction_data$year <- 2021  # Temporarily use the last year of the training data
-
-for (indep_var in sum_columns) {
+for (i in 2013:2021) {
+  # train test split
+  train_data <- ukraine_data %>% 
+    filter(year != i)
+  test_data <- ukraine_data %>% 
+    filter(year == i)
   
-  # train region-only model
-  formula_reg <- as.formula(paste("log(real_gdp) ~ log(", indep_var, ") + region", sep = ""))
-  model_reg<- lm(formula_reg, data = train_data)
-  
-  # train region and year model
-  formula_year <- as.formula(paste("log(real_gdp) ~ log(", indep_var, ") + region + factor(year)", sep = ""))
-  model_year <- lm(formula_year, data = train_data)
-  
-  # get the coefficient for factor(year)2020
-  coef_2020 <- coef(model_year)[names(coef(model_year)) == "factor(year)2020"]
-  
-  # use the models
-  test_data$real_gdp_pred_reg <- exp(predict(model_reg, test_data))
-  test_data$real_gdp_pred_year <- exp(predict(model_year, test_data) - coef_2020)
-  
-  # calculate the absolute % error
-  test_data$error_reg <- abs(((test_data$real_gdp - test_data$real_gdp_pred_reg) / test_data$real_gdp) * 100)
-  test_data$error_year <- abs(((test_data$real_gdp - test_data$real_gdp_pred_year) / test_data$real_gdp) * 100)
-  
-  # print the mean % error
-  print(paste("Mean % error for REG and ", indep_var, "is", mean(test_data$error_reg, na.rm = TRUE)))
-  print(paste("Mean % error for YEAR and ", indep_var, "is", mean(test_data$error_year, na.rm = TRUE)))
-  
-  # estimate the same models on the entire dataset
-  model_reg <- lm(formula_reg, data = full_data)
-  model_year <- lm(formula_year, data = full_data)
-  
-  # get the coefficient for factor(year)2021
-  coef_2021 <- coef(model_year)[names(coef(model_year)) == "factor(year)2021"]
+  # train the model
+  model_reg <- lm(gdp_diff ~ light_diff + region, data = train_data)
+  model_log <- lm(log(real_gdp) ~ log(allangle_snow_free_hq_sum) + region, data = train_data)
 
-  # predict on the prediction data
-  prediction_data$real_gdp_pred_reg <- exp(predict(model_reg, prediction_data))
-  prediction_data$real_gdp_pred_year <- exp(predict(model_year, prediction_data) - coef_2021)
+  # predict on the test set
+  test_data$gdp_pred_reg <- predict(model_reg, test_data)
+  test_data$gdp_pred_log <- exp(predict(model_log, test_data))
 
-  # calculate the gdp change from 2021 to 2022
-  gdp_change_reg <- ((sum(prediction_data$real_gdp_pred_reg) - sum(test_data$real_gdp))/sum(test_data$real_gdp)) * 100
-  gdp_change_year <- ((sum(prediction_data$real_gdp_pred_year) - sum(test_data$real_gdp))/sum(test_data$real_gdp)) * 100
+  # calculate the mean absolute error
+  av_mae <- mean(abs(test_data$gdp_diff - test_data$gdp_pred_reg), na.rm = TRUE)
+  av_mae_log <- mean(abs(test_data$real_gdp - test_data$gdp_pred_log), na.rm = TRUE)
 
-  print(paste("GDP REG change for", indep_var, "is", gdp_change_reg))
-  print(paste("GDP YEAR change for", indep_var, "is", gdp_change_year))
-
+  # store the results
+  error_df <- rbind(error_df, data.frame(year = i, av_mae = av_mae, av_mae_log = av_mae_log))
 }
 
-
+# save the results
+write.csv(error_df, "fe_results.csv")
 
