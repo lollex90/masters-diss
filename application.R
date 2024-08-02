@@ -2,7 +2,8 @@ library(tidyverse)
 library(readxl)
 
 # read gdp prediction
-gdp_2022 <- read.csv("gdp_predictions_ukraine.csv")
+gdp_2022 <- read.csv("gdp_predictions_ukraine_aa_sf_hq.csv") %>% 
+  rename(gdp_prediction = gdp_pred)
 
 # read gdp in 2021
 gdp_2021 <- read.csv("data/gdp_ukraine_clean.csv") %>% 

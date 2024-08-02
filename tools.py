@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from keras.models import Sequential, Model
-from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Resizing
+from keras.layers import Dense, Conv2D, MaxPooling2D, Flatten, Resizing, BatchNormalization, Dropout
 import tensorflow as tf
 import random
 import os
@@ -178,11 +178,12 @@ def define_cnn(n_features = 10, n_conv = 2, n_dense = 2, input_shape = (765, 107
     model = Sequential()
     model.add(Resizing(res_x, res_y, input_shape=input_shape))
     for i in range(n_conv):
-        model.add(Conv2D(8 ** i, (3, 3), activation='relu'))
+        model.add(Conv2D(8 * (2**i), (3, 3), activation='relu'))
         model.add(MaxPooling2D((2, 2)))
+        model.add(BatchNormalization())
     model.add(Flatten())
     for i in range(n_dense-1, 0, -1):
-        model.add(Dense(8 ** i, activation='relu'))
+        model.add(Dense(8 * (2**i), activation='relu'))
     model.add(Dense(n_features))
     return model
 
